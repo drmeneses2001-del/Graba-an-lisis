@@ -1,0 +1,86 @@
+name: GrabaAnalisis
+
+options:
+  bundleIdPrefix: com.grabaanalisis
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "17.0"
+  minimumXcodeGenVersion: "2.38.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+    ENABLE_BITCODE: NO
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+
+  GrabaAnalisis:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+      - path: Sources/Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.grabaanalisis.app
+        PRODUCT_NAME: GrabaAnalisis
+        INFOPLIST_FILE: Sources/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/App/GrabaAnalisis.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    dependencies:
+      - target: BroadcastCapture
+        embed: true
+        codeSign: true
+
+  # Extension de ReplayKit: unica via soportada por iOS para capturar el audio
+  # que suena en el dispositivo. Corre con un limite duro de ~50 MB de RAM,
+  # por eso solo compila el subconjunto minimo de Core.
+  BroadcastCapture:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/BroadcastExtension
+      - path: Sources/Core/Shared/AppGroup.swift
+      - path: Sources/Core/Shared/SessionModels.swift
+      - path: Sources/Core/Shared/CaptureHandoff.swift
+      - path: Sources/Core/Memory/MemoryReporter.swift
+      - path: Sources/Core/Memory/DeviceClass.swift
+      - path: Sources/Core/Audio/AudioFormatSpec.swift
+      - path: Sources/Core/Audio/PCMFileWriter.swift
+      - path: Sources/Core/Audio/SampleBufferConverter.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.grabaanalisis.app.broadcast
+        PRODUCT_NAME: BroadcastCapture
+        INFOPLIST_FILE: Sources/BroadcastExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/BroadcastExtension/BroadcastCapture.entitlements
+
+  GrabaAnalisisTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/GrabaAnalisisTests
+    dependencies:
+      - target: GrabaAnalisis
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.grabaanalisis.app.tests
+
+schemes:
+  GrabaAnalisis:
+    build:
+      targets:
+        GrabaAnalisis: all
+        BroadcastCapture: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - GrabaAnalisisTests
