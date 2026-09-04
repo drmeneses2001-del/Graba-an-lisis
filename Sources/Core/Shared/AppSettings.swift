@@ -82,11 +82,11 @@ final class AppSettings: ObservableObject {
     private init() {
         let defaults = AppGroup.defaults
         engine = AnalysisEngineKind(rawValue: defaults.string(forKey: Keys.engine) ?? "") ?? .onDevice
-        forceOnDeviceRecognition = defaults.object(forKey: Keys.onDeviceRecognition) as? Bool ?? true
+        forceOnDeviceRecognition = (defaults.object(forKey: Keys.onDeviceRecognition) as? Bool) ?? true
         localeIdentifier = defaults.string(forKey: Keys.locale) ?? "es-ES"
-        includeTranscriptInReport = defaults.object(forKey: Keys.includeTranscript) as? Bool ?? true
+        includeTranscriptInReport = (defaults.object(forKey: Keys.includeTranscript) as? Bool) ?? true
         organizationName = defaults.string(forKey: Keys.organization) ?? ""
-        userSessionMinuteCap = defaults.object(forKey: Keys.sessionCap) as? Int ?? 0
+        userSessionMinuteCap = (defaults.object(forKey: Keys.sessionCap) as? Int) ?? 0
     }
 
     /// Duracion efectiva: el minimo entre lo que aguanta el aparato y lo que

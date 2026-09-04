@@ -167,9 +167,9 @@ final class ClaudeClient {
             switch type {
             case "message_start":
                 if let message = event["message"] as? [String: Any] {
-                    model = message["model"] as? String ?? model
+                    model = (message["model"] as? String) ?? model
                     if let usage = message["usage"] as? [String: Any] {
-                        inputTokens = usage["input_tokens"] as? Int ?? 0
+                        inputTokens = (usage["input_tokens"] as? Int) ?? 0
                     }
                 }
             case "content_block_delta":
@@ -180,16 +180,16 @@ final class ClaudeClient {
                 }
             case "message_delta":
                 if let delta = event["delta"] as? [String: Any] {
-                    stopReason = delta["stop_reason"] as? String ?? stopReason
+                    stopReason = (delta["stop_reason"] as? String) ?? stopReason
                     if let details = delta["stop_details"] as? [String: Any] {
-                        refusalExplanation = details["explanation"] as? String ?? ""
+                        refusalExplanation = (details["explanation"] as? String) ?? ""
                     }
                 }
                 if let usage = event["usage"] as? [String: Any] {
-                    outputTokens = usage["output_tokens"] as? Int ?? outputTokens
+                    outputTokens = (usage["output_tokens"] as? Int) ?? outputTokens
                 }
             case "error":
-                let message = (event["error"] as? [String: Any])?["message"] as? String ?? "Error desconocido."
+                let message = ((event["error"] as? [String: Any])?["message"] as? String) ?? "Error desconocido."
                 throw ClientError.server(http.statusCode, message)
             default:
                 continue
