@@ -6,20 +6,18 @@ final class OnDeviceAnalyzerTests: XCTestCase {
     private func makeTranscript() -> (RecordingSession, Transcript) {
         let session = RecordingSession(title: "Reunión de prueba",
                                        duration: 600,
-                                       source: .broadcast,
-                                       tracks: [.device, .local],
                                        stage: .captured)
-        let lines: [(AudioTrack, Double, String)] = [
-            (.device, 5, "Buenos días a todos. Hoy tenemos que cerrar el presupuesto del proyecto de migración."),
-            (.local, 20, "Propongo que dividamos la migración en dos fases para reducir el riesgo del corte de servicio."),
-            (.device, 40, "No estoy de acuerdo, el problema es que dos fases duplican el coste de pruebas y es un riesgo grave."),
-            (.local, 60, "Me comprometo a preparar la estimación de costes de ambas opciones para el viernes."),
-            (.device, 80, "Perfecto, entonces decidimos esperar a esa estimación antes de aprobar el presupuesto."),
-            (.local, 100, "¿Quién se encarga de avisar al equipo de infraestructura sobre el calendario?"),
-            (.device, 120, "El riesgo principal es que dependemos de la ventana de mantenimiento del proveedor y podría fallar.")
+        let lines: [(Double, String)] = [
+            (5, "Buenos días a todos. Hoy tenemos que cerrar el presupuesto del proyecto de migración."),
+            (20, "Propongo que dividamos la migración en dos fases para reducir el riesgo del corte de servicio."),
+            (40, "No estoy de acuerdo, el problema es que dos fases duplican el coste de pruebas y es un riesgo grave."),
+            (60, "Me comprometo a preparar la estimación de costes de ambas opciones para el viernes."),
+            (80, "Perfecto, entonces decidimos esperar a esa estimación antes de aprobar el presupuesto."),
+            (100, "¿Quién se encarga de avisar al equipo de infraestructura sobre el calendario?"),
+            (120, "El riesgo principal es que dependemos de la ventana de mantenimiento del proveedor y podría fallar.")
         ]
-        let utterances = lines.map { track, start, text in
-            Utterance(track: track, start: start, end: start + 8, text: text, confidence: 0.9)
+        let utterances = lines.map { start, text in
+            Utterance(start: start, end: start + 8, text: text, confidence: 0.9)
         }
         let transcript = Transcript(sessionID: session.id,
                                     localeIdentifier: "es-ES",
@@ -43,8 +41,6 @@ final class OnDeviceAnalyzerTests: XCTestCase {
         XCTAssertFalse(report.commitments.isEmpty, "Debe detectar «me comprometo»")
         XCTAssertFalse(report.decisions.isEmpty, "Debe detectar «decidimos»")
         XCTAssertFalse(report.risks.isEmpty, "Debe detectar «riesgo»")
-        XCTAssertEqual(report.participation.count, 2)
-        XCTAssertEqual(report.participation.map(\.share).reduce(0, +), 1, accuracy: 0.001)
         XCTAssertEqual(report.provenance.engine, OnDeviceAnalyzer().displayName)
     }
 

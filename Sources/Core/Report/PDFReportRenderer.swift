@@ -251,8 +251,7 @@ private final class Run {
         let facts: [(String, String)] = [
             ("Fecha", formatter.string(from: input.session.createdAt)),
             ("Duración", ReportComposer.formatDuration(input.session.duration)),
-            ("Origen del audio", input.session.source.displayName),
-            ("Interlocutores", input.report.participation.map(\.speaker).joined(separator: " · ")),
+            ("Origen del audio", "Salida de audio del dispositivo"),
             ("Motor de análisis", input.report.provenance.engine)
         ]
         for (label, value) in facts where !value.isEmpty {

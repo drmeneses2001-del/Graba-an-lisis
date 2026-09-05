@@ -8,32 +8,6 @@ import NaturalLanguage
 /// completo en memoria más de una vez.
 enum TranscriptStatistics {
 
-    static func participation(from transcript: Transcript,
-                              sentimentByUtterance: [UUID: Double]) -> [SpeakerStat] {
-        var bySpeaker: [String: (seconds: TimeInterval, words: Int, turns: Int, sentiment: [Double])] = [:]
-        for utterance in transcript.utterances {
-            var entry = bySpeaker[utterance.speaker] ?? (0, 0, 0, [])
-            entry.seconds += utterance.duration
-            entry.words += utterance.wordCount
-            entry.turns += 1
-            if let score = sentimentByUtterance[utterance.id] { entry.sentiment.append(score) }
-            bySpeaker[utterance.speaker] = entry
-        }
-        let totalSeconds = bySpeaker.values.reduce(0) { $0 + $1.seconds }
-        return bySpeaker
-            .map { speaker, entry in
-                SpeakerStat(speaker: speaker,
-                            seconds: entry.seconds,
-                            words: entry.words,
-                            turns: entry.turns,
-                            share: totalSeconds > 0 ? entry.seconds / totalSeconds : 0,
-                            averageSentiment: entry.sentiment.isEmpty
-                                ? 0
-                                : entry.sentiment.reduce(0, +) / Double(entry.sentiment.count))
-            }
-            .sorted { $0.seconds > $1.seconds }
-    }
-
     /// Puntuación de sentimiento por intervención. Usa el modelo de Apple
     /// cuando el idioma está soportado y un léxico de marcadores cuando no.
     static func sentiment(for transcript: Transcript) -> [UUID: Double] {

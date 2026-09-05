@@ -68,14 +68,13 @@ final class SessionStore: ObservableObject {
         guard handoff.isFinished else { return session }
 
         session.duration = handoff.seconds
-        session.audioBytes = handoff.bytesDevice + handoff.bytesLocal
+        session.audioBytes = handoff.bytes
         session.truncationReason = handoff.stopReason
         if session.stage == .recording { session.stage = .captured }
-        // Una pista vacia no es una pista: la difusion pudo empezar sin permiso
-        // de microfono, o el audio de la app venir protegido por DRM.
-        session.tracks = AudioTrack.allCases.filter { track in
-            let bytes = track == .device ? handoff.bytesDevice : handoff.bytesLocal
-            return bytes > UInt64(AudioFormatSpec.bytesPerSecondPerTrack)
+        // Audio insuficiente: la app de origen pudo proteger su sonido con
+        // DRM, o la difusion se detuvo casi al instante.
+        if session.audioBytes < UInt64(AudioFormatSpec.bytesPerSecond) && session.truncationReason == nil {
+            session.truncationReason = "La difusión no capturó audio utilizable. Algunas apps protegen su sonido con DRM."
         }
         save(session)
         CaptureHandoff.clear()

@@ -65,13 +65,10 @@ struct ClaudeAnalyzer: AnalysisEngine {
 
         // Lo medible se mide, no se pregunta.
         let sentimentScores = TranscriptStatistics.sentiment(for: transcript)
-        let participation = TranscriptStatistics.participation(from: transcript,
-                                                               sentimentByUtterance: sentimentScores)
         let sentimentSeries = TranscriptStatistics.sentimentSeries(from: transcript,
                                                                    scores: sentimentScores,
                                                                    maxPoints: limits.maxChartPoints)
         var report = merged.toReport(session: session, limits: limits)
-        report.participation = participation
         report.sentimentSeries = sentimentSeries
         report.metrics = TranscriptStatistics.metrics(transcript: transcript,
                                                       session: session,
@@ -85,7 +82,7 @@ struct ClaudeAnalyzer: AnalysisEngine {
             generatedAt: Date(),
             transcriptWords: transcript.wordCount,
             chunksProcessed: chunks.count,
-            notes: "Las cifras de participación, sentimiento y métricas se calculan en el dispositivo a partir del audio; el texto analítico procede del modelo.")
+            notes: "Las cifras de sentimiento y las métricas se calculan en el dispositivo a partir del audio; el texto analítico procede del modelo.")
 
         progress(1.0, "Análisis terminado")
         return report
@@ -94,15 +91,18 @@ struct ClaudeAnalyzer: AnalysisEngine {
     // MARK: - Instrucciones
 
     private static let systemPrompt = """
-    Eres un analista de reuniones. Recibes la transcripción de una sesión grabada, \
-    con marcas de tiempo y con el hablante identificado por la pista de audio de la que viene: \
-    «Interlocutor remoto» es lo que sonó por la salida de audio del dispositivo \
-    (la otra parte de una llamada, un vídeo, un podcast) y «Participante local» es lo que \
-    entró por el micrófono.
+    Eres un analista de reuniones. Recibes la transcripción, con marcas de tiempo, de todo el \
+    audio que sonó por la salida de audio de un dispositivo mientras se grabó: puede ser una \
+    llamada, una videollamada, un podcast o un vídeo. Es una sola pista continua, sin \
+    diarización: no sabes cuántas personas hablan salvo que la propia transcripción lo deje claro \
+    (alguien se presenta, lo nombran, dice su propio nombre).
 
     Reglas de trabajo:
     - No inventes. Cada elemento que extraigas tiene que estar sostenido por la transcripción.
     - Si un dato no aparece (responsable, fecha, motivo), deja el campo vacío en vez de suponerlo.
+    - Solo atribuyas algo a una persona por su nombre si el texto lo identifica explícitamente. \
+      Si no se puede saber quién lo dijo, deja el campo de responsable vacío: no inventes ni \
+      «Hablante 1» ni etiquetas por el estilo.
     - Los tiempos van en segundos desde el inicio, deducidos de las marcas [mm:ss] o [h:mm:ss].
     - Distingue con cuidado: una propuesta es algo que alguien plantea hacer; una decisión es \
       algo que quedó cerrado; un compromiso es alguien asumiendo una tarea concreta.

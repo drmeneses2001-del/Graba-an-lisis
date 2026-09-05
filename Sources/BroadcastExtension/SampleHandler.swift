@@ -3,12 +3,13 @@ import ReplayKit
 import CoreMedia
 import os
 
-/// Captura del audio que suena en el dispositivo.
+/// Captura del audio que suena por la salida del dispositivo.
 ///
 /// iOS no deja que una app lea la salida de audio de otras apps. La unica via
 /// soportada es una extension de difusion de ReplayKit: cuando el usuario
-/// arranca la difusion desde el selector del sistema, iOS entrega aqui el audio
-/// de las apps (`.audioApp`) y el del microfono (`.audioMic`).
+/// arranca la difusion desde el selector del sistema, iOS entrega aqui el
+/// audio de las apps (`.audioApp`). El picker no ofrece la opcion de mezclar
+/// el microfono, asi que solo se recibe ese tipo de muestra.
 ///
 /// El proceso vive con un limite de memoria de unos 50 MB. Todo lo que hay aqui
 /// esta escrito para no acumular: se convierte cada bloque, se escribe a disco
@@ -23,10 +24,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private let log = Logger(subsystem: "com.grabaanalisis.broadcast", category: "captura")
 
     private var session: RecordingSession?
-    private var deviceWriter: PCMFileWriter?
-    private var localWriter: PCMFileWriter?
-    private let deviceConverter = SampleBufferConverter()
-    private let localConverter = SampleBufferConverter()
+    private var writer: PCMFileWriter?
+    private let converter = SampleBufferConverter()
 
     private var startedAt = Date()
     private var lastHandoffAt = Date.distantPast
@@ -42,26 +41,21 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let limits = ResourceLimits.baseline(for: DeviceClass.current)
         maxSessionSeconds = limits.maxSessionSeconds
 
-        // El tope de disco se reparte entre las dos pistas.
-        var perTrackCap = limits.maxAudioBytes / 2
+        var audioCap = limits.maxAudioBytes
         let freeDisk = MemoryReporter.freeDiskBytes()
         if freeDisk > 0 {
-            perTrackCap = min(perTrackCap, freeDisk / 6)
+            audioCap = min(audioCap, freeDisk / 3)
         }
 
         let title = Self.defaultTitle(from: setupInfo)
-        var session = RecordingSession(title: title,
-                                       source: .broadcast,
-                                       tracks: [.device, .local],
-                                       stage: .recording)
+        var session = RecordingSession(title: title, stage: .recording)
         startedAt = Date()
         session.createdAt = startedAt
 
         do {
             try FileManager.default.createDirectory(at: session.directoryURL,
                                                     withIntermediateDirectories: true)
-            deviceWriter = try PCMFileWriter(url: session.trackURL(.device), maxBytes: perTrackCap)
-            localWriter = try PCMFileWriter(url: session.trackURL(.local), maxBytes: perTrackCap)
+            writer = try PCMFileWriter(url: session.audioURL, maxBytes: audioCap)
         } catch {
             log.error("No se pudo abrir el almacenamiento: \(error.localizedDescription, privacy: .public)")
             finish(withMessage: "No se pudo preparar el almacenamiento de la grabación.")
@@ -83,7 +77,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func broadcastFinished() {
         stopReason = stopReason ?? "Difusión finalizada por el usuario."
-        closeWriters()
+        closeWriter()
         publishHandoff(force: true, finished: true)
     }
 
@@ -95,12 +89,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
         switch sampleBufferType {
         case .audioApp:
-            write(sampleBuffer, using: deviceConverter, to: deviceWriter)
-        case .audioMic:
-            write(sampleBuffer, using: localConverter, to: localWriter)
-        case .video:
-            // El video no se guarda: multiplicaria por cien el disco y la
-            // memoria y no aporta nada al analisis.
+            guard let writer, !writer.isCapped else { break }
+            converter.convert(sampleBuffer) { bytes in
+                _ = writer.append(bytes)
+            }
+        case .audioMic, .video:
+            // Sin micrófono ni vídeo: el picker no lo ofrece y no aportan
+            // nada al análisis, solo memoria y disco.
             return
         @unknown default:
             return
@@ -108,15 +103,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
         enforceBudgets()
         publishHandoff(force: false)
-    }
-
-    private func write(_ sampleBuffer: CMSampleBuffer,
-                       using converter: SampleBufferConverter,
-                       to writer: PCMFileWriter?) {
-        guard let writer, !writer.isCapped else { return }
-        converter.convert(sampleBuffer) { bytes in
-            _ = writer.append(bytes)
-        }
     }
 
     // MARK: - Limites
@@ -134,7 +120,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             return
         }
 
-        if deviceWriter?.isCapped == true && localWriter?.isCapped == true {
+        if writer?.isCapped == true {
             finish(withMessage: "Se alcanzó el límite de espacio reservado para esta sesión.")
         }
     }
@@ -143,7 +129,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         guard !didFinish else { return }
         didFinish = true
         stopReason = message
-        closeWriters()
+        closeWriter()
         publishHandoff(force: true, finished: true)
 
         let error = NSError(domain: "com.grabaanalisis.broadcast",
@@ -152,9 +138,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         finishBroadcastWithError(error)
     }
 
-    private func closeWriters() {
-        deviceWriter?.close()
-        localWriter?.close()
+    private func closeWriter() {
+        writer?.close()
         writeManifest(finished: true)
     }
 
@@ -163,7 +148,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private func writeManifest(finished: Bool = false) {
         guard var session else { return }
         session.duration = Date().timeIntervalSince(startedAt)
-        session.audioBytes = (deviceWriter?.bytesWritten ?? 0) + (localWriter?.bytesWritten ?? 0)
+        session.audioBytes = writer?.bytesWritten ?? 0
         session.stage = finished ? .captured : .recording
         session.truncationReason = stopReason
         guard let data = try? JSONEncoder.grabaAnalisis.encode(session) else { return }
@@ -184,8 +169,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             startedAt: startedAt,
             updatedAt: now,
             seconds: now.timeIntervalSince(startedAt),
-            bytesDevice: deviceWriter?.bytesWritten ?? 0,
-            bytesLocal: localWriter?.bytesWritten ?? 0,
+            bytes: writer?.bytesWritten ?? 0,
             isFinished: finished,
             footprintBytes: MemoryReporter.footprintBytes(),
             stopReason: stopReason)

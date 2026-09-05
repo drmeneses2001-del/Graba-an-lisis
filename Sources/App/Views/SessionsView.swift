@@ -48,7 +48,7 @@ struct SessionRow: View {
             Text(session.title).font(.headline).lineLimit(2)
             HStack(spacing: 8) {
                 Label(ReportComposer.formatDuration(session.duration), systemImage: "clock")
-                Label(session.source.displayName, systemImage: session.source == .broadcast ? "iphone.radiowaves.left.and.right" : "mic")
+                Label(MemoryReporter.formatted(session.audioBytes), systemImage: "waveform")
             }
             .font(.caption)
             .foregroundStyle(.secondary)

@@ -1,15 +1,13 @@
 import Foundation
 
-/// Una intervencion continua de una de las dos pistas.
+/// Una intervencion continua reconocida en el audio.
 struct Utterance: Codable, Identifiable, Hashable {
     var id: UUID = UUID()
-    var track: AudioTrack
     var start: TimeInterval
     var end: TimeInterval
     var text: String
     var confidence: Float
 
-    var speaker: String { track.speakerLabel }
     var duration: TimeInterval { max(0, end - start) }
 
     var wordCount: Int {
@@ -36,23 +34,17 @@ struct Transcript: Codable {
 
     var isEmpty: Bool { utterances.isEmpty }
 
-    /// Texto plano con marcas de tiempo y hablante, que es lo que consume el
-    /// motor de analisis.
+    /// Texto plano con marcas de tiempo, que es lo que consume el motor de
+    /// analisis.
     var annotatedText: String {
         utterances
             .sorted { $0.start < $1.start }
-            .map { utterance in
-                "[\(Self.timestamp(utterance.start))] \(utterance.speaker): \(utterance.text)"
-            }
+            .map { utterance in "[\(Self.timestamp(utterance.start))] \(utterance.text)" }
             .joined(separator: "\n")
     }
 
     var plainText: String {
         utterances.sorted { $0.start < $1.start }.map(\.text).joined(separator: " ")
-    }
-
-    func utterances(for track: AudioTrack) -> [Utterance] {
-        utterances.filter { $0.track == track }.sorted { $0.start < $1.start }
     }
 
     /// Trocea la transcripcion anotada respetando los limites del aparato y sin
@@ -61,7 +53,7 @@ struct Transcript: Codable {
         var result: [String] = []
         var current = ""
         for utterance in utterances.sorted(by: { $0.start < $1.start }) {
-            let line = "[\(Self.timestamp(utterance.start))] \(utterance.speaker): \(utterance.text)\n"
+            let line = "[\(Self.timestamp(utterance.start))] \(utterance.text)\n"
             if current.count + line.count > maxChars && !current.isEmpty {
                 result.append(current)
                 current = ""

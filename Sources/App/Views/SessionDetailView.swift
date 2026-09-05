@@ -79,7 +79,7 @@ struct SessionDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(ReportComposer.formatDuration(session.duration), systemImage: "clock")
-                Label(session.source.displayName, systemImage: "waveform")
+                Label("Salida de audio", systemImage: "waveform")
                 Spacer()
                 Text(MemoryReporter.formatted(session.audioBytes))
             }
@@ -169,12 +169,11 @@ struct SessionDetailView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(Transcript.timestamp(utterance.start)).monospacedDigit()
-                        Text(utterance.speaker)
                         Spacer()
                         Text("\(Int(utterance.confidence * 100)) %")
                     }
                     .font(.caption2)
-                    .foregroundStyle(utterance.track == .device ? Color.blue : Color.orange)
+                    .foregroundStyle(.secondary)
                     Text(utterance.text).font(.callout)
                 }
             }

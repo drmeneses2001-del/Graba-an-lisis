@@ -5,15 +5,15 @@ import AVFoundation
 ///
 /// 16 kHz mono en enteros de 16 bits: es lo que pide el reconocedor de voz, y
 /// es el formato mas pequeno que no pierde inteligibilidad. Un minuto ocupa
-/// 1,83 MB por pista, asi que una reunion de dos horas con dos pistas cabe en
-/// unos 440 MB de disco y en cero memoria, porque nunca se carga entera.
+/// 1,83 MB, asi que una sesion de dos horas cabe en unos 220 MB de disco y en
+/// cero memoria, porque nunca se carga entera.
 enum AudioFormatSpec {
 
     static let sampleRate: Double = 16_000
     static let channels: AVAudioChannelCount = 1
     static let bytesPerFrame = 2
 
-    static var bytesPerSecondPerTrack: Double {
+    static var bytesPerSecond: Double {
         sampleRate * Double(bytesPerFrame)
     }
 
@@ -34,10 +34,10 @@ enum AudioFormatSpec {
     }
 
     static func seconds(fromBytes bytes: UInt64) -> TimeInterval {
-        Double(bytes) / bytesPerSecondPerTrack
+        Double(bytes) / bytesPerSecond
     }
 
     static func bytes(forSeconds seconds: TimeInterval) -> UInt64 {
-        UInt64(max(0, seconds) * bytesPerSecondPerTrack)
+        UInt64(max(0, seconds) * bytesPerSecond)
     }
 }

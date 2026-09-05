@@ -1,26 +1,21 @@
 # Graba y Análisis
 
-App para iPhone y iPad que graba lo que suena en el dispositivo, lo transcribe, lo analiza a fondo y entrega un PDF con resumen ejecutivo, propuestas, críticas, compromisos, decisiones, riesgos, cronología, tablas y gráficas. Todo vigilando el consumo de memoria con límites calculados para el aparato en el que corre.
+App para iPhone y iPad que escucha lo que suena por la salida de audio del dispositivo, lo transcribe, lo analiza a fondo y entrega un PDF con resumen ejecutivo, propuestas, críticas, compromisos, decisiones, riesgos, cronología, tablas y gráficas. Todo vigilando el consumo de memoria con límites calculados para el aparato en el que corre.
 
 ## Qué hace
 
-1. **Captura** el audio de dos formas:
-   - **Todo el dispositivo** (extensión de difusión de ReplayKit): audio de las demás apps y micrófono, en **dos pistas separadas**. Así el informe distingue lo que dijo la otra parte de la llamada, el vídeo o el podcast («Interlocutor remoto») de lo que se dijo en la sala («Participante local»).
-   - **Micrófono** desde la propia app, con la app en segundo plano. Recoge la sala y lo que sale por el altavoz.
+1. **Captura** todo lo que suena por la salida de audio del dispositivo (una llamada, una videollamada, un podcast, un vídeo) mediante la extensión de difusión de ReplayKit: se inicia con un botón desde la app.
 2. **Transcribe** con el reconocimiento de voz de Apple, en ventanas solapadas, con opción de que el audio no salga nunca del aparato.
 3. **Analiza** con uno de dos motores:
-   - **En el dispositivo**: resumen extractivo, temas por frecuencia, clasificación de cada frase por marcadores de discurso (propuesta, crítica, compromiso, decisión, riesgo, pregunta), sentimiento, participación. Nada sale del aparato.
+   - **En el dispositivo**: resumen extractivo, temas por frecuencia, clasificación de cada frase por marcadores de discurso (propuesta, crítica, compromiso, decisión, riesgo, pregunta), sentimiento. Nada sale del aparato.
    - **Claude (nube)**: la transcripción se envía por bloques a la API de Anthropic con salida estructurada y se consolida en un solo informe. Mucho más rico; requiere clave propia.
-4. **Genera un PDF** A4 con portada, índice con números de página, resumen ejecutivo con indicadores, gráficas vectoriales (participación, peso de temas, evolución del tono, compromisos por responsable y estado, críticas por gravedad, matriz de riesgos, cronología), tablas paginadas con cabecera repetida, citas, glosario, anexo con la transcripción y una sección de trazabilidad.
+4. **Genera un PDF** A4 con portada, índice con números de página, resumen ejecutivo con indicadores, gráficas vectoriales (peso de temas, evolución del tono, compromisos por responsable y estado, críticas por gravedad, matriz de riesgos, cronología), tablas paginadas con cabecera repetida, citas, glosario, anexo con la transcripción y una sección de trazabilidad.
 
 ## Lo que iOS permite y lo que no
 
-iOS **no** deja que una app lea la salida de audio de otras apps. No hay API para ello y no la habrá por diseño de privacidad. Las dos vías reales son las que usa esta app:
+iOS **no** deja que una app lea la salida de audio de otras apps. No hay API para ello y no la habrá por diseño de privacidad. La única vía real es la extensión de difusión de ReplayKit, que es la que usa esta app: el usuario la inicia desde el botón de la app (o desde el Centro de control) y iOS entrega el audio de las demás apps a la extensión mientras está activa. El picker no ofrece mezclar el micrófono: la app solo escucha lo que sale por el altavoz, nunca lo que entra por él.
 
-| Vía | Qué captura | Quién la inicia | Limitaciones |
-|---|---|---|---|
-| Extensión de difusión (ReplayKit) | Audio de todas las apps + micrófono, pistas separadas | El usuario, desde el botón de la app o el Centro de control | iOS silencia el audio protegido por DRM (Apple Music, algunos servicios de vídeo). La extensión vive con ~50 MB de RAM. |
-| Micrófono en la app | Lo que suena en la sala y por el altavoz | La app | Calidad dependiente del entorno; una sola pista. |
+iOS silencia el audio protegido por DRM (Apple Music, algunos servicios de vídeo): esas apps no se pueden capturar por diseño. La extensión vive con un tope propio de memoria de ~38 MB, por debajo del límite real del sistema (~50 MB).
 
 Mientras la difusión está activa, iOS muestra la barra roja de estado. Es intencionado: el sistema garantiza que el usuario siempre sabe que se está grabando.
 
@@ -47,13 +42,11 @@ Antes de compilar en un dispositivo real:
 3. Registra el App Group `group.com.grabaanalisis.shared` (o el tuyo) en ambos targets y en el portal de desarrolladores. Si cambias el identificador, actualízalo también en `AppGroup.identifier`.
 4. Compila y ejecuta el esquema `GrabaAnalisis`. La extensión se instala con la app.
 
-La difusión y el micrófono no funcionan en el simulador. El motor de análisis, el generador de PDF y los tests sí.
+La difusión no funciona en el simulador. El motor de análisis, el generador de PDF y los tests sí.
 
 ## Uso
 
-**Grabar todo el dispositivo**: pestaña *Grabar* → «Todo el dispositivo» → pulsa el botón del sistema → elige «Graba y Análisis» → activa el micrófono si quieres tu voz → «Iniciar difusión». Para terminar, toca la barra roja o usa el Centro de control. Al volver a la app, la sesión aparece en *Sesiones*.
-
-**Grabar con el micrófono**: pestaña *Grabar* → «Micrófono» → «Grabar». La app sigue grabando en segundo plano.
+**Grabar**: pestaña *Grabar* → toca el botón del sistema → elige «Graba y Análisis» → «Iniciar difusión». Para terminar, toca la barra roja o usa el Centro de control. Al volver a la app, la sesión aparece en *Sesiones*.
 
 **Producir el informe**: abre la sesión → «Transcribir, analizar y generar PDF». El progreso muestra la fase, el porcentaje y la memoria en uso. El PDF se previsualiza dentro de la app y se comparte con la hoja del sistema.
 
@@ -93,7 +86,6 @@ Con aviso de presión de memoria, todos los límites bajan a la mitad (con suelo
 | Pieza | Estrategia |
 |---|---|
 | Extensión de difusión | Tope propio de **38 MB** (el sistema mata a ~50). Cada `CMSampleBuffer` se convierte a 16 kHz mono Int16 y se escribe a disco sin copia (`Data(bytesNoCopy:)`); el conversor y el buffer de salida se reutilizan; no hay acumulación. Si la huella supera el tope, la difusión se cierra sola con un mensaje y el audio queda guardado. |
-| Grabación por micrófono | Tap de `AVAudioEngine` dimensionado según el perfil; conversión y escritura inmediatas. |
 | Transcripción | El fichero PCM se recorre en ventanas solapadas; solo una ventana está en memoria. Antes de cada ventana se comprueba el margen y, si hay presión, se espera. |
 | Análisis en el dispositivo | Si la transcripción excede el presupuesto de caracteres, se analiza una muestra uniforme y el informe lo declara. |
 | Análisis con Claude | La transcripción se trocea por bloques del tamaño que permite el perfil; se acumula solo el JSON de cada bloque. |
@@ -112,7 +104,7 @@ Sources/
 └── Core/
     ├── Shared/                App Group, modelos de sesión, almacén, ajustes, traspaso extensión→app
     ├── Memory/                MemoryReporter, DeviceClass + ResourceLimits, MemoryGovernor
-    ├── Audio/                 Formato canónico, escritor/lector PCM, conversor, grabación por micrófono
+    ├── Audio/                 Formato canónico, escritor/lector PCM, conversor de sample buffers
     ├── Transcription/         Modelos y servicio sobre SFSpeechRecognizer
     ├── Analysis/              Modelos del informe, motor en el dispositivo, cliente y motor Claude, pipeline
     └── Report/                Tema, modelo de bloques, motor de texto, compositor, paginador, gráficas
@@ -122,7 +114,7 @@ Tests/GrabaAnalisisTests/      Límites, analizador en el dispositivo, generador
 Flujo de una sesión:
 
 ```
-Audio (ReplayKit o micrófono) ─▶ audio_device.pcm / audio_local.pcm
+Difusión de ReplayKit ─▶ audio.pcm
         ─▶ SpeechTranscriptionService ─▶ transcript.json
         ─▶ OnDeviceAnalyzer | ClaudeAnalyzer ─▶ analysis.json
         ─▶ ReportComposer ─▶ [ReportBlock] ─▶ PDFReportRenderer ─▶ informe.pdf
@@ -130,7 +122,7 @@ Audio (ReplayKit o micrófono) ─▶ audio_device.pcm / audio_local.pcm
 
 ### El informe
 
-Secciones que se emiten cuando hay contenido: Resumen ejecutivo (indicadores, resumen, puntos clave, clima de la sesión) · Panorama (reparto del tiempo hablado, detalle por interlocutor, evolución del tono) · Temas · Propuestas · Críticas y objeciones · Decisiones · Compromisos · Riesgos (matriz + tabla) · Pendiente (próximos pasos, preguntas abiertas) · Cronología · Citas y glosario · Anexo con la transcripción · Metodología y trazabilidad.
+Secciones que se emiten cuando hay contenido: Resumen ejecutivo (indicadores, resumen, puntos clave, clima de la sesión) · Panorama (evolución del tono) · Temas · Propuestas · Críticas y objeciones · Decisiones · Compromisos · Riesgos (matriz + tabla) · Pendiente (próximos pasos, preguntas abiertas) · Cronología · Citas y glosario · Anexo con la transcripción · Metodología y trazabilidad.
 
 Las gráficas siguen unas reglas fijas: un solo eje, marcas finas con el extremo redondeado, separación de 2 pt entre rellenos, rejilla discreta, valor escrito junto a cada marca, leyenda cuando hay más de una serie, nunca más de tres series con color y nunca un color de estado reutilizado como serie. La paleta está validada para daltonismo y el informe se lee igual impreso en blanco y negro porque el color nunca es el único portador de información.
 
@@ -148,6 +140,6 @@ En Xcode: `⌘U` con el esquema `GrabaAnalisis`. Cubren la monotonía y degradac
 ## Limitaciones conocidas
 
 - El motor en el dispositivo es heurístico: reconoce fórmulas («propongo», «me comprometo», «no estoy de acuerdo»…) y no interpreta ironía ni contexto implícito. El PDF lo declara en la sección de trazabilidad.
-- La atribución de hablante se basa en la pista de audio. Si dos personas hablan por el mismo micrófono, aparecen como un solo «Participante local».
+- No hay diarización: la app no sabe cuántas personas hablan salvo que el propio texto lo deje claro (alguien se presenta, lo nombran). Los campos de responsable quedan vacíos o marcados como «Sin identificar» cuando no hay forma de saberlo.
 - El reconocedor de Apple no admite todos los idiomas en modo estrictamente local; si el idioma elegido no está descargado, la app avisa.
 - La extensión no graba vídeo a propósito: multiplicaría el consumo sin aportar nada al análisis.

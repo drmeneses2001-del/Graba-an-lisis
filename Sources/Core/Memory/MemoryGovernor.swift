@@ -96,7 +96,7 @@ final class MemoryGovernor: ObservableObject {
         let freeDisk = MemoryReporter.freeDiskBytes()
         if freeDisk > 0 {
             candidate.maxAudioBytes = min(candidate.maxAudioBytes, freeDisk / 3)
-            let secondsAllowedByDisk = Double(candidate.maxAudioBytes) / AudioFormatSpec.bytesPerSecondPerTrack / 2.0
+            let secondsAllowedByDisk = Double(candidate.maxAudioBytes) / AudioFormatSpec.bytesPerSecond / 2.0
             candidate.maxSessionSeconds = min(candidate.maxSessionSeconds, secondsAllowedByDisk)
         }
 

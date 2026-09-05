@@ -148,17 +148,6 @@ struct TimelineEvent: Codable, Identifiable, Hashable {
     var label: String
 }
 
-struct SpeakerStat: Codable, Identifiable, Hashable {
-    var id = UUID()
-    var speaker: String
-    var seconds: TimeInterval
-    var words: Int
-    var turns: Int
-    /// Fracción del tiempo hablado total, 0-1.
-    var share: Double
-    var averageSentiment: Double
-}
-
 struct SentimentPoint: Codable, Hashable {
     var timestamp: TimeInterval
     /// -1 negativo, 0 neutro, +1 positivo.
@@ -213,7 +202,6 @@ struct AnalysisReport: Codable, Identifiable, Hashable {
     var quotes: [Quote]
     var glossary: [GlossaryTerm]
     var timeline: [TimelineEvent]
-    var participation: [SpeakerStat]
     var sentimentSeries: [SentimentPoint]
     var metrics: ReportMetrics
     var provenance: AnalysisProvenance
@@ -236,7 +224,6 @@ struct AnalysisReport: Codable, Identifiable, Hashable {
             quotes: [],
             glossary: [],
             timeline: [],
-            participation: [],
             sentimentSeries: [],
             metrics: ReportMetrics(durationSeconds: 0,
                                    wordCount: 0,

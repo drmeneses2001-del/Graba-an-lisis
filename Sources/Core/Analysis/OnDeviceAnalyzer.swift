@@ -5,8 +5,8 @@ import NaturalLanguage
 ///
 /// Clasifica cada frase por los marcadores de discurso que contiene, puntúa las
 /// frases por densidad de palabras clave para el resumen extractivo, y calcula
-/// las métricas a partir de las pistas de audio. No inventa nada: todo lo que
-/// aparece en el informe está literalmente en la transcripción.
+/// las métricas a partir del audio. No inventa nada: todo lo que aparece en el
+/// informe está literalmente en la transcripción.
 ///
 /// El coste en memoria está acotado por `ResourceLimits.maxTranscriptCharsInMemory`:
 /// si la transcripción es más larga, se analiza por bloques y se conserva solo
@@ -18,8 +18,6 @@ struct OnDeviceAnalyzer: AnalysisEngine {
 
     private struct Sentence {
         let text: String
-        let speaker: String
-        let track: AudioTrack
         let timestamp: TimeInterval
         let utteranceID: UUID
         var score: Double = 0
@@ -30,10 +28,8 @@ struct OnDeviceAnalyzer: AnalysisEngine {
                  limits: ResourceLimits,
                  progress: @escaping @Sendable (Double, String) -> Void) async throws -> AnalysisReport {
 
-        progress(0.05, "Midiendo participación")
+        progress(0.1, "Midiendo el tono")
         let sentimentScores = TranscriptStatistics.sentiment(for: transcript)
-        let participation = TranscriptStatistics.participation(from: transcript,
-                                                               sentimentByUtterance: sentimentScores)
 
         progress(0.2, "Extrayendo vocabulario")
         let keywords = TranscriptStatistics.keywords(from: transcript, limit: 40)
@@ -101,7 +97,6 @@ struct OnDeviceAnalyzer: AnalysisEngine {
         let summarySentences = Array(ranked.prefix(8)).sorted { $0.timestamp < $1.timestamp }
         let executiveSummary = Self.buildSummary(summarySentences,
                                                  session: session,
-                                                 participation: participation,
                                                  commitments: commitments,
                                                  decisions: decisions)
         let keyPoints = ranked.dropFirst(8).prefix(7).map(\.text).map(Self.tidy)
@@ -109,7 +104,7 @@ struct OnDeviceAnalyzer: AnalysisEngine {
         let topics = Self.topics(from: sentences, keywords: keywords, limit: 8)
         let quotes = ranked.prefix(5).map { sentence in
             Quote(text: Self.tidy(sentence.text),
-                  speaker: sentence.speaker,
+                  speaker: Self.namedAuthor(in: sentence.text),
                   timestamp: sentence.timestamp,
                   whyItMatters: "Concentra los términos más repetidos de la sesión.")
         }
@@ -164,7 +159,6 @@ struct OnDeviceAnalyzer: AnalysisEngine {
             quotes: Array(quotes),
             glossary: Array(glossary),
             timeline: timeline,
-            participation: participation,
             sentimentSeries: sentimentSeries,
             metrics: metrics,
             provenance: AnalysisProvenance(
@@ -205,8 +199,6 @@ struct OnDeviceAnalyzer: AnalysisEngine {
                 guard fragment.count > 12 else { continue }
                 let offsetRatio = text.isEmpty ? 0 : Double(text.distance(from: text.startIndex, to: range.lowerBound)) / Double(text.count)
                 result.append(Sentence(text: fragment,
-                                       speaker: utterance.speaker,
-                                       track: utterance.track,
                                        timestamp: utterance.start + utterance.duration * offsetRatio,
                                        utteranceID: utterance.id))
                 consumed += fragment.count
@@ -245,7 +237,7 @@ struct OnDeviceAnalyzer: AnalysisEngine {
     private static func commitment(from sentence: Sentence, reference: Date) -> Commitment {
         let due = TranscriptStatistics.dueDate(in: sentence.text, reference: reference)
         let names = TranscriptStatistics.personNames(in: sentence.text)
-        let owner = names.first ?? sentence.speaker
+        let owner = names.first ?? Self.unidentified
         let status: CommitmentStatus
         if LinguisticResources.containsAny(sentence.text, markers: LinguisticResources.critiqueMarkers) {
             status = .atRisk
@@ -275,7 +267,7 @@ struct OnDeviceAnalyzer: AnalysisEngine {
             effort = .unknown
         }
         return Proposal(statement: tidy(sentence.text),
-                        proposedBy: sentence.speaker,
+                        proposedBy: Self.namedAuthor(in: sentence.text),
                         rationale: "",
                         expectedImpact: "",
                         effort: effort,
@@ -290,14 +282,14 @@ struct OnDeviceAnalyzer: AnalysisEngine {
         return Critique(statement: tidy(sentence.text),
                         target: "",
                         severity: severity,
-                        raisedBy: sentence.speaker,
+                        raisedBy: Self.namedAuthor(in: sentence.text),
                         counterpoint: "",
                         timestamp: sentence.timestamp)
     }
 
     private static func decision(from sentence: Sentence) -> Decision {
         Decision(statement: tidy(sentence.text),
-                 madeBy: sentence.speaker,
+                 madeBy: Self.namedAuthor(in: sentence.text),
                  rationale: "",
                  alternativesConsidered: [],
                  timestamp: sentence.timestamp)
@@ -316,13 +308,20 @@ struct OnDeviceAnalyzer: AnalysisEngine {
         questions.filter { question in
             guard let index = sentences.firstIndex(where: { $0.text == question }) else { return true }
             let following = sentences.dropFirst(index + 1).prefix(3)
-            // Si el siguiente turno lo da otra persona y no es otra pregunta,
-            // damos la pregunta por contestada.
-            let answered = following.contains { candidate in
-                candidate.speaker != sentences[index].speaker && !LinguisticResources.isQuestion(candidate.text)
-            }
+            // Si lo que sigue no es otra pregunta, dejamos la pregunta por
+            // contestada: no hay diarización, así que no se puede exigir que
+            // responda "otra persona".
+            let answered = following.contains { !LinguisticResources.isQuestion($0.text) }
             return !answered
         }
+    }
+
+    /// Único nombre propio citado en la frase, si lo hay. Sin diarización, es
+    /// la única manera honesta de intentar poner responsable a algo.
+    private static let unidentified = "Sin identificar"
+
+    private static func namedAuthor(in text: String) -> String {
+        TranscriptStatistics.personNames(in: text).first ?? unidentified
     }
 
     private static func deduplicate<T>(_ items: [T], key: KeyPath<T, String>) -> [T] {
@@ -378,7 +377,6 @@ struct OnDeviceAnalyzer: AnalysisEngine {
 
     private static func buildSummary(_ sentences: [Sentence],
                                      session: RecordingSession,
-                                     participation: [SpeakerStat],
                                      commitments: [Commitment],
                                      decisions: [Decision]) -> String {
         let formatter = DateFormatter()
@@ -388,8 +386,7 @@ struct OnDeviceAnalyzer: AnalysisEngine {
 
         var paragraphs: [String] = []
         let minutes = Int(session.duration / 60)
-        let speakers = participation.map { "\($0.speaker) (\(Int($0.share * 100)) %)" }.joined(separator: ", ")
-        paragraphs.append("Sesión de \(minutes) minutos registrada el \(formatter.string(from: session.createdAt)) mediante \(session.source.displayName.lowercased()). Reparto del tiempo hablado: \(speakers.isEmpty ? "una sola voz identificada" : speakers).")
+        paragraphs.append("Sesión de \(minutes) minutos capturada el \(formatter.string(from: session.createdAt)) a partir del audio que sonó por la salida del dispositivo.")
 
         let body = sentences.map { tidy($0.text) }.joined(separator: " ")
         if !body.isEmpty { paragraphs.append(body) }
@@ -442,7 +439,7 @@ struct OnDeviceAnalyzer: AnalysisEngine {
 
     private static func subtitle(session: RecordingSession, topics: [Topic]) -> String {
         let names = topics.prefix(3).map(\.name).joined(separator: " · ")
-        return names.isEmpty ? session.source.displayName : names
+        return names.isEmpty ? "Difusión del sistema" : names
     }
 
     private static func tidy(_ text: String) -> String {

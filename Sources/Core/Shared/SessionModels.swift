@@ -1,44 +1,5 @@
 import Foundation
 
-/// De donde salio el audio de una sesion.
-enum CaptureSource: String, Codable, CaseIterable {
-    /// Extension de ReplayKit: audio de las apps + microfono, todo el sistema.
-    case broadcast
-    /// Microfono de la app en primer plano o en segundo plano.
-    case microphone
-
-    var displayName: String {
-        switch self {
-        case .broadcast: return "Difusión del sistema"
-        case .microphone: return "Micrófono"
-        }
-    }
-}
-
-/// Las dos pistas que puede tener una sesion. Mantenerlas separadas es lo que
-/// permite distinguir quien hablo por el altavoz (la otra parte de la llamada,
-/// el video, el podcast) de quien hablo en la sala.
-enum AudioTrack: String, Codable, CaseIterable, Identifiable {
-    case device   // lo que salio por la salida de audio
-    case local    // lo que entro por el microfono
-
-    var id: String { rawValue }
-
-    var fileName: String {
-        switch self {
-        case .device: return "audio_device.pcm"
-        case .local: return "audio_local.pcm"
-        }
-    }
-
-    var speakerLabel: String {
-        switch self {
-        case .device: return "Interlocutor remoto"
-        case .local: return "Participante local"
-        }
-    }
-}
-
 enum SessionStage: String, Codable {
     case recording
     case captured
@@ -61,14 +22,16 @@ enum SessionStage: String, Codable {
 
 /// Manifiesto de una sesion. Deliberadamente pequeno: los datos pesados viven
 /// en ficheros aparte dentro de la misma carpeta y se leen por trozos.
+///
+/// Cada sesion tiene un unico fichero de audio: lo que sono por la salida de
+/// audio del dispositivo mientras la difusion del sistema estuvo activa. No
+/// hay pistas separadas ni distincion de origen que mantener.
 struct RecordingSession: Codable, Identifiable, Hashable {
     var id: UUID
     var title: String
     var createdAt: Date
     var duration: TimeInterval
-    var source: CaptureSource
     var sampleRate: Double
-    var tracks: [AudioTrack]
     var stage: SessionStage
     var localeIdentifier: String
     var notes: String
@@ -81,9 +44,7 @@ struct RecordingSession: Codable, Identifiable, Hashable {
          title: String,
          createdAt: Date = Date(),
          duration: TimeInterval = 0,
-         source: CaptureSource,
          sampleRate: Double = AudioFormatSpec.sampleRate,
-         tracks: [AudioTrack] = [],
          stage: SessionStage = .recording,
          localeIdentifier: String = Locale.current.identifier,
          notes: String = "",
@@ -93,9 +54,7 @@ struct RecordingSession: Codable, Identifiable, Hashable {
         self.title = title
         self.createdAt = createdAt
         self.duration = duration
-        self.source = source
         self.sampleRate = sampleRate
-        self.tracks = tracks
         self.stage = stage
         self.localeIdentifier = localeIdentifier
         self.notes = notes
@@ -104,11 +63,7 @@ struct RecordingSession: Codable, Identifiable, Hashable {
     }
 
     var directoryURL: URL { AppGroup.directory(for: id) }
-
-    func trackURL(_ track: AudioTrack) -> URL {
-        directoryURL.appendingPathComponent(track.fileName)
-    }
-
+    var audioURL: URL { directoryURL.appendingPathComponent("audio.pcm") }
     var transcriptURL: URL { directoryURL.appendingPathComponent("transcript.json") }
     var analysisURL: URL { directoryURL.appendingPathComponent("analysis.json") }
     var reportURL: URL { directoryURL.appendingPathComponent("informe.pdf") }

@@ -23,7 +23,7 @@ enum ReportComposer {
 
         sections.append(summarySection(report: report, session: session))
 
-        if !report.participation.isEmpty || !report.topics.isEmpty {
+        if report.sentimentSeries.count > 2 {
             sections.append(overviewSection(report: report))
         }
         if !report.topics.isEmpty {
@@ -70,7 +70,7 @@ enum ReportComposer {
         blocks.append(.metricTiles([
             MetricTile(value: formatDuration(metrics.durationSeconds),
                        label: "Duración",
-                       footnote: session.source.displayName),
+                       footnote: "Salida de audio del dispositivo"),
             MetricTile(value: "\(metrics.wordCount)",
                        label: "Palabras transcritas",
                        footnote: String(format: "%.0f por minuto", metrics.wordsPerMinute)),
@@ -106,50 +106,15 @@ enum ReportComposer {
     }
 
     private static func overviewSection(report: AnalysisReport) -> Section {
-        var blocks: [ReportBlock] = []
-
-        if !report.participation.isEmpty {
-            let items = report.participation.map { stat in
-                (label: stat.speaker,
-                 value: stat.seconds,
-                 valueLabel: "\(Int(stat.share * 100)) %")
-            }
-            blocks.append(.chart(.horizontalBars(
-                title: "Reparto del tiempo hablado",
-                subtitle: "Segundos de habla por interlocutor, con su porcentaje sobre el total",
-                items: items,
-                useSequentialRamp: false)))
-            blocks.append(.caption("Las pistas se separan en el momento de grabar: lo que sonó por la salida de audio y lo que entró por el micrófono se transcriben por separado."))
-            blocks.append(.spacer(12))
-
-            blocks.append(.table(TableSpec(
-                title: "Detalle por interlocutor",
-                columns: [TableColumn(title: "Interlocutor", widthFraction: 0.34),
-                          TableColumn(title: "Tiempo", widthFraction: 0.16, alignment: .right),
-                          TableColumn(title: "Turnos", widthFraction: 0.14, alignment: .right),
-                          TableColumn(title: "Palabras", widthFraction: 0.18, alignment: .right),
-                          TableColumn(title: "Tono medio", widthFraction: 0.18, alignment: .right)],
-                rows: report.participation.map { stat in
-                    [TableCell(stat.speaker),
-                     TableCell(formatDuration(stat.seconds)),
-                     TableCell("\(stat.turns)"),
-                     TableCell("\(stat.words)"),
-                     TableCell(String(format: "%+.2f", stat.averageSentiment))]
-                },
-                note: nil)))
-        }
-
-        if report.sentimentSeries.count > 2 {
-            blocks.append(.spacer(14))
-            blocks.append(.chart(.line(
+        let blocks: [ReportBlock] = [
+            .chart(.line(
                 title: "Evolución del tono a lo largo de la sesión",
                 subtitle: "Media de sentimiento por tramo, de −1 (tenso) a +1 (favorable)",
                 points: report.sentimentSeries.map { (x: $0.timestamp, y: $0.score) },
                 yRange: -1...1,
                 xAxisLabel: "Tiempo desde el inicio",
-                zeroBaseline: true)))
-        }
-
+                zeroBaseline: true))
+        ]
         return Section(title: "Panorama de la sesión", blocks: blocks)
     }
 
@@ -403,8 +368,11 @@ enum ReportComposer {
         if !report.quotes.isEmpty {
             blocks.append(.subheading("Citas destacadas"))
             for quote in report.quotes.prefix(6) {
-                blocks.append(.quote(text: quote.text,
-                                     attribution: "\(quote.speaker) · \(Transcript.timestamp(quote.timestamp))"))
+                let who = quote.speaker.trimmingCharacters(in: .whitespaces)
+                let attribution = who.isEmpty || who == "Sin identificar"
+                    ? Transcript.timestamp(quote.timestamp)
+                    : "\(who) · \(Transcript.timestamp(quote.timestamp))"
+                blocks.append(.quote(text: quote.text, attribution: attribution))
             }
         }
         if !report.glossary.isEmpty {
@@ -431,7 +399,7 @@ enum ReportComposer {
         // Se emite intervención a intervención para que el paginador pueda
         // cortar donde quiera sin construir el texto entero en memoria.
         for utterance in transcript.utterances.sorted(by: { $0.start < $1.start }) {
-            blocks.append(.keyValues([("[\(Transcript.timestamp(utterance.start))] \(utterance.speaker)", utterance.text)]))
+            blocks.append(.keyValues([("[\(Transcript.timestamp(utterance.start))]", utterance.text)]))
         }
         return Section(title: "Anexo: transcripción", blocks: blocks)
     }
@@ -445,8 +413,7 @@ enum ReportComposer {
         formatter.timeStyle = .medium
 
         var rows: [[TableCell]] = [
-            [TableCell("Origen del audio"), TableCell(session.source.displayName)],
-            [TableCell("Pistas grabadas"), TableCell(session.tracks.map(\.speakerLabel).joined(separator: ", "))],
+            [TableCell("Origen del audio"), TableCell("Salida de audio del dispositivo (difusión del sistema)")],
             [TableCell("Duración"), TableCell(formatDuration(session.duration))],
             [TableCell("Audio en disco"), TableCell(MemoryReporter.formatted(session.audioBytes))],
             [TableCell("Formato de audio"), TableCell("PCM 16 kHz mono, 16 bits")],

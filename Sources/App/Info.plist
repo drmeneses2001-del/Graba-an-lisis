@@ -43,16 +43,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-		<string>processing</string>
-	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>La app usa el micrófono para grabar la reunión o la sesión que quieres analizar. El audio se queda en tu dispositivo salvo que actives el análisis en la nube.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>El reconocimiento de voz convierte la grabación en texto para poder resumirla y analizarla. Puedes forzar el modo estrictamente en el dispositivo desde Ajustes.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>No se utiliza la red local. Solo se contacta con la API de Anthropic si activas el motor de análisis en la nube.</string>
 </dict>
 </plist>

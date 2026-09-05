@@ -11,8 +11,7 @@ struct CaptureHandoff: Codable {
     var startedAt: Date
     var updatedAt: Date
     var seconds: TimeInterval
-    var bytesDevice: UInt64
-    var bytesLocal: UInt64
+    var bytes: UInt64
     var isFinished: Bool
     var footprintBytes: UInt64
     var stopReason: String?

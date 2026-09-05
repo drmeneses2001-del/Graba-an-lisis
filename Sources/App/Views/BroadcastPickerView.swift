@@ -4,6 +4,9 @@ import ReplayKit
 /// Botón del sistema que arranca la difusión. iOS exige que el usuario la
 /// inicie desde este control o desde el Centro de control: una app no puede
 /// empezar a capturar el audio del dispositivo por su cuenta.
+///
+/// Sin botón de micrófono a propósito: la app solo escucha lo que sale por la
+/// salida de audio, nunca lo que entra por el micrófono.
 struct BroadcastPickerView: UIViewRepresentable {
 
     let extensionBundleID: String
@@ -11,7 +14,7 @@ struct BroadcastPickerView: UIViewRepresentable {
     func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
         let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 60, height: 60))
         picker.preferredExtension = extensionBundleID
-        picker.showsMicrophoneButton = true
+        picker.showsMicrophoneButton = false
         picker.backgroundColor = .clear
         return picker
     }

@@ -31,7 +31,6 @@ final class SpeechTranscriptionService {
     struct Progress {
         var completedWindows: Int
         var totalWindows: Int
-        var currentTrack: AudioTrack
 
         var fraction: Double {
             totalWindows > 0 ? Double(completedWindows) / Double(totalWindows) : 0
@@ -63,31 +62,21 @@ final class SpeechTranscriptionService {
         let onDevice = forceOnDevice && recognizer.supportsOnDeviceRecognition
         recognizer.defaultTaskHint = .dictation
 
-        let tracks = session.tracks.filter { track in
-            let size = FileManager.default.fileSizeBytes(at: session.trackURL(track))
-            return size > UInt64(AudioFormatSpec.bytesPerSecondPerTrack)
+        guard FileManager.default.fileSizeBytes(at: session.audioURL) > UInt64(AudioFormatSpec.bytesPerSecond) else {
+            throw TranscriptionError.noAudio
         }
-        guard !tracks.isEmpty else { throw TranscriptionError.noAudio }
 
-        var allWindows: [(AudioTrack, PCMFileReader.Window)] = []
-        var readers: [AudioTrack: PCMFileReader] = [:]
-        for track in tracks {
-            let reader = try PCMFileReader(url: session.trackURL(track))
-            readers[track] = reader
-            for window in reader.windows(seconds: limits.transcriptionWindowSeconds,
-                                         overlap: limits.transcriptionOverlapSeconds) {
-                allWindows.append((track, window))
-            }
-        }
-        defer { readers.values.forEach { $0.close() } }
+        let reader = try PCMFileReader(url: session.audioURL)
+        defer { reader.close() }
+        let windows = reader.windows(seconds: limits.transcriptionWindowSeconds,
+                                     overlap: limits.transcriptionOverlapSeconds)
+        guard !windows.isEmpty else { throw TranscriptionError.noAudio }
 
         var utterances: [Utterance] = []
         var recognizedSeconds: TimeInterval = 0
         var completed = 0
 
-        for (track, window) in allWindows {
-            guard let reader = readers[track] else { continue }
-
+        for window in windows {
             // Antes de cada ventana se comprueba el margen de memoria; si el
             // sistema esta apretando, se espera en vez de encadenar reservas.
             await MainActor.run { MemoryGovernor.shared.sample() }
@@ -105,13 +94,10 @@ final class SpeechTranscriptionService {
                 let start = window.start + segment.timestamp
                 let end = start + segment.duration
                 // El solapamiento entre ventanas puede repetir palabras; se
-                // descarta lo que ya cubrio la ventana anterior de esta pista.
-                if let last = utterances.last(where: { $0.track == track }), start < last.end - 0.15 {
-                    continue
-                }
+                // descarta lo que ya cubrio la ventana anterior.
+                if let last = utterances.last, start < last.end - 0.15 { continue }
                 guard !segment.substring.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                utterances.append(Utterance(track: track,
-                                            start: start,
+                utterances.append(Utterance(start: start,
                                             end: end,
                                             text: segment.substring,
                                             confidence: segment.confidence))
@@ -119,15 +105,12 @@ final class SpeechTranscriptionService {
             }
 
             completed += 1
-            let snapshot = Progress(completedWindows: completed,
-                                    totalWindows: allWindows.count,
-                                    currentTrack: track)
-            progress(snapshot)
+            progress(Progress(completedWindows: completed, totalWindows: windows.count))
             try Task.checkCancellation()
         }
 
         let merged = Self.mergeIntoUtterances(utterances)
-        let totalDuration = max(session.duration, readers.values.map(\.duration).max() ?? 0)
+        let totalDuration = max(session.duration, reader.duration)
 
         return Transcript(sessionID: session.id,
                           localeIdentifier: localeIdentifier,
@@ -183,15 +166,14 @@ final class SpeechTranscriptionService {
         }
     }
 
-    /// Une segmentos contiguos de la misma pista en frases legibles. Sin esto
-    /// el informe seria una lista de palabras sueltas.
+    /// Une segmentos contiguos en frases legibles. Sin esto el informe seria
+    /// una lista de palabras sueltas.
     private static func mergeIntoUtterances(_ segments: [Utterance]) -> [Utterance] {
         let sorted = segments.sorted { $0.start < $1.start }
         var result: [Utterance] = []
 
         for segment in sorted {
             guard var last = result.last,
-                  last.track == segment.track,
                   segment.start - last.end < 0.8,
                   last.text.count < 600,
                   !last.text.hasSuffix(".") || last.text.count < 120
